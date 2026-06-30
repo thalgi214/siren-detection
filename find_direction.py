@@ -1,38 +1,52 @@
 import numpy as np
-import matplotlib.pyplot as plt
-from scipy.io import wavfile
+import serial
+import time
 
-#GCC-PHAT 알고리즘을 이용해 두 음원 신호 사이의 시간 지연(TDOA)을 추정하는 함수
 def gcc_phat(sig1, sig2, fs):
-    
-    # FFT
     n = len(sig1) + len(sig2) - 1
     X1 = np.fft.fft(sig1, n)
     X2 = np.fft.fft(sig2, n)
-    
-    # convolution X1 & X2*
-    # R(f)=X1​(f)⋅X2∗​(f)=∣X1​(f)∣∣X2​(f)∣ej(θ1​(f)−θ2​(f))
+
     R = X1 * np.conj(X2)
-    
-    # PHAT 가중치 적용 -> 크기를 1로 나누어 위상 정보만 남김 
-    # 분모가 0이 되는 것 방지하기 위해 미세한 값(1e-10) 추가
     R_phat = R / (np.abs(R) + 1e-10)
-    
-    # IFFT -> fftshift(정렬)
+
     cc = np.fft.ifft(R_phat)
     cc = np.fft.fftshift(cc.real)
-    '''
-    왼쪽 절반: 음수 lag (sig2가 sig1보다 빠른 경우)
-    중앙: lag = 0
-    오른쪽 절반: 양수 lag (sig2가 sig1보다 느린 경우)
-    '''
 
     max_idx = np.argmax(cc)
-    lags = np.arange(-n//2, n//2) #샘플 지연
-    estimated_lag = lags[max_idx] 
-    
-    # 샘플 지연 개수를 시간(초) 단위로 변환
+    lags = np.arange(-n // 2, (n + 1) // 2)
+    estimated_lag = lags[max_idx]
+
     estimated_delta_t = estimated_lag / fs
-    
     return estimated_delta_t, lags, cc
 
+
+def compute_tdoa_doa(mic1_signal, mic2_signal, fs, window,
+                      c_speed=340.0, mic_dist=0.4, silence_thresh=50):
+    """
+    mic1, mic2 신호 블록 하나를 받아 TDOA(시간차)와 DOA(각도)를 계산.
+    무음 구간이면 None을 반환.
+    """
+    # DC 오프셋 제거
+    mic1_signal = mic1_signal - np.mean(mic1_signal)
+    mic2_signal = mic2_signal - np.mean(mic2_signal)
+
+    # 신호 크기가 작으면 무음으로 간주
+    if np.max(np.abs(mic1_signal)) < silence_thresh or np.max(np.abs(mic2_signal)) < silence_thresh:
+        return None
+
+    # Hanning 윈도우 적용 
+    mic1_w = mic1_signal * window
+    mic2_w = mic2_signal * window
+
+    # GCC-PHAT 계산
+    estimated_delta_t, lags, cc_val = gcc_phat(mic1_w, mic2_w, fs)
+
+    # DOA 계산
+    sin_argument = (c_speed * estimated_delta_t) / mic_dist
+    sin_argument = np.clip(sin_argument, -1.0, 1.0)
+
+    estimated_theta_rad = np.arcsin(sin_argument)
+    estimated_theta = np.degrees(estimated_theta_rad)
+
+    return estimated_delta_t, estimated_theta
