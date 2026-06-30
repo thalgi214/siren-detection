@@ -13,3 +13,19 @@ void setup() {
   bitClear(ADCSRA, ADPS1);
   bitSet(ADCSRA, ADPS2);
 }
+
+void loop() {
+  unsigned long currentMicros = micros();
+  
+  if (currentMicros - previousMicros >= sampleInterval) {
+    previousMicros = currentMicros;
+    
+    int val1 = analogRead(mic1Pin);
+    int val2 = analogRead(mic2Pin);
+    
+    // CSV 형태로 데이터 전송
+    Serial.print(val1);
+    Serial.print(",");
+    Serial.println(val2);
+  }
+}
