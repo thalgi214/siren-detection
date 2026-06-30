@@ -73,7 +73,13 @@ def main():
         if np.max(np.abs(block1)) < 50 or np.max(np.abs(block2)) < 50:
             continue
         
-        estimated_delta_t, lags, cc_val = gcc_phat(block1, block2, fs) 
+        # Hanning 윈도우 적용
+        window = np.hanning(BLOCK_SIZE)
+        block1_w = block1 * window
+        block2_w = block2 * window
+
+        # 윈도우가 적용된 블록을 전달
+        estimated_delta_t, lags, cc_val = gcc_phat(block1_w, block2_w, fs) 
         # lags, cc_val : 디버깅용 변수
 
         # TDOA 계산
