@@ -14,7 +14,7 @@ def gcc_phat(sig1, sig2, fs):
     cc = np.fft.fftshift(cc.real)
 
     max_idx = np.argmax(cc)
-    lags = np.arange(-n // 2, n // 2)
+    lags = np.arange(-n // 2, (n+1) // 2)
     estimated_lag = lags[max_idx]
 
     estimated_delta_t = estimated_lag / fs
