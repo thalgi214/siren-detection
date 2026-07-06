@@ -39,7 +39,6 @@ class SirenGRU(torch.nn.Module):
         out, _ = self.gru(x)
         return self.sigmoid(self.fc(out))
 
-
 # CNN 분류 모델
 class SirenClassifier2D(torch.nn.Module):
     def __init__(self):
@@ -71,9 +70,8 @@ class SirenClassifier2D(torch.nn.Module):
         x = self.sigmoid(self.fc2(x))
         return x
 
-
-# 두 음원으로 TDOA 구하기
-def compute_tdoa(sig1, sig2, fs):
+# 두 음원으로 TDOA 및 DOA(각도) 구하기
+def compute_doa(sig1, sig2, fs): 
     sig1 = sig1 - np.mean(sig1)
     sig2 = sig2 - np.mean(sig2)
 
@@ -97,7 +95,12 @@ def compute_tdoa(sig1, sig2, fs):
     max_idx = np.argmax(cc)
     lags = np.arange(-n // 2, (n + 1) // 2)
     delta_t = lags[max_idx] / fs
-    return delta_t
+
+    # TDOA -> 각도 계산
+    sin_arg = (C_SPEED * delta_t) / MIC_DIST  
+    sin_arg = np.clip(sin_arg, -1.0, 1.0)  
+    theta = np.degrees(np.arcsin(sin_arg))  
+    return delta_t, theta 
 
 
 stft = Spectrogram(n_fft=N_FFT, hop_length=HOP_LENGTH, power=1.0).to(DEVICE)
@@ -147,14 +150,14 @@ while True:
         # mic1으로 마스크 만들기
         wave1 = torch.from_numpy(block1).float().unsqueeze(0).to(DEVICE)
         with torch.no_grad():
-            m_gt = stft(wave1)
-            gru_input = m_gt[0].transpose(0, 1).unsqueeze(0)
-            pred_mask = gru_model(gru_input)
-            mask_2d = pred_mask.squeeze(0).transpose(0, 1)
-
-            # 마스크 씌워서 사이렌인지 분류
-            enhanced = m_gt[0] * mask_2d
-            cnn_input = enhanced.unsqueeze(0).unsqueeze(0)
+            # STFT: 파형 -> 스펙트로그램 (1, 129, Time)
+            spec = stft(wave1)
+            spec_2d = spec[0]  # (129, Time)
+            gru_input = spec_2d.transpose(0, 1).unsqueeze(0)  # (1, Time, 129)
+            pred_mask = gru_model(gru_input)  # (1, Time, 129)
+            mask_2d = pred_mask.squeeze(0).transpose(0, 1)  # (129, Time)
+            enhanced = spec_2d * mask_2d  # (129, Time)
+            cnn_input = enhanced.unsqueeze(0).unsqueeze(0)  # (1, 1, 129, Time)
             prob = cnn_model(cnn_input).item()
 
         siren = prob >= CLASSIFY_THRESH
@@ -185,10 +188,8 @@ while True:
                             torch.from_numpy(enh2).unsqueeze(0), SR)
             debug_idx += 1
 
-            # TDOA -> 각도
-            delta_t = compute_tdoa(enh1, enh2, SR)
-            if delta_t is not None:
-                sin_arg = (C_SPEED * delta_t) / MIC_DIST
-                sin_arg = np.clip(sin_arg, -1.0, 1.0)
-                theta = np.degrees(np.arcsin(sin_arg))
+            # DOA 계산 
+            result = compute_doa(enh1, enh2, SR)
+            if result is not None:
+                delta_t, theta = result
                 print("시간차(TDOA): %+.3f ms | 추정 각도(DOA): %+.1f도" % (delta_t * 1000, theta))
