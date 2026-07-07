@@ -24,5 +24,5 @@ Madhu, N. and Martin, R. (2008). Acoustic Source Localization with Microphone Ar
 ## 진동모터 연결 참고
 https://ko.ineed-motor.com/news/how-to-build-a-vibration-motor-circuit-35660850.html
 
-## Sallen-key 2차 저역 통과 필터 (셀런키 필터)
-https://m.blog.naver.com/joa_quin/221143654000
+## Sallen-key 2차 lowpass 필터 (셀런키 필터)
+https://www.ti.com/lit/an/sloa024b/sloa024b.pdf?ts=1783311618236
